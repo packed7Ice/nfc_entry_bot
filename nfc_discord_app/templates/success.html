@@ -44,13 +44,13 @@
     <div class="container">
         <div class="icon">✅</div>
         <h1>登録完了！</h1>
-        <p><strong>{{ name }}</strong> さんのタグを登録しました。<br>監視画面に戻ります。</p>
-        <a href="/" class="btn">監視画面へ戻る</a>
+        <p><strong>{{ name }}</strong> さんのタグを登録しました。<br>このウィンドウは自動的に閉じます。</p>
+        <button onclick="window.close()" class="btn">ウィンドウを閉じる</button>
     </div>
     <script>
         setTimeout(() => {
-            window.location.href = '/';
-        }, 3000); // 3秒後に自動遷移
+            window.close();
+        }, 3000); // 3秒後に自動クローズ
     </script>
 </body>
 </html>

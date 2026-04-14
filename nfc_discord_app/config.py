@@ -2,6 +2,7 @@
 
 import os
 import logging
+import logging.handlers
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -42,6 +43,27 @@ def get_logger(name: str) -> logging.Logger:
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.setLevel(getattr(logging, LOG_LEVEL.upper(), logging.INFO))
+    return logger
+
+
+def get_entry_logger() -> logging.Logger:
+    """Create a logger specifically for tracking entry/exit events to a rotating file."""
+    logger = logging.getLogger("entry_history")
+    if not logger.handlers:
+        log_dir = BASE_DIR / "logs"
+        log_dir.mkdir(exist_ok=True)
+        # 6時間ごとにローテーション。過去30個分（約1週間分）保持。
+        handler = logging.handlers.TimedRotatingFileHandler(
+            filename=log_dir / "entry_history.log",
+            when="H",
+            interval=6,
+            backupCount=30,
+            encoding="utf-8"
+        )
+        formatter = logging.Formatter("%(asctime)s,%(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
     return logger
 
 

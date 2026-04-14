@@ -196,6 +196,10 @@
                     cancelRegistration();
                 }, 3000); // 3 seconds after register success
             }
+            else if (data.type === "register_failed") {
+                addLog(`<span class="log-warn">登録失敗: ${data.data.message}</span>`);
+                cancelRegistration();
+            }
         };
     </script>
 </body>

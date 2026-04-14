@@ -3,12 +3,13 @@
 import sys
 import time
 
-from config import get_logger, validate_config, COOLDOWN_SECONDS, STATE_RESET_HOURS
+from config import get_logger, get_entry_logger, validate_config, COOLDOWN_SECONDS, STATE_RESET_HOURS
 from registry import UserRegistry, normalize_tag_id
 from notifier import send_notification
 from nfc_reader import NFCReader
 
 logger = get_logger(__name__)
+entry_logger = get_entry_logger()
 
 
 class CooldownTracker:
@@ -62,6 +63,9 @@ class StateTracker:
 import threading
 from web_app import create_app, events
 
+import subprocess
+import urllib.parse
+
 def handle_tag(
     tag_id_raw: str,
     registry: UserRegistry,
@@ -80,11 +84,25 @@ def handle_tag(
     if user is None:
         logger.warning("Unregistered tag: %s", tag_id)
         events.emit("unregistered", {"tag_id": tag_id})
+        
+        # Pop up Incognito browser for registration
+        url = f"http://localhost:5000/register_start?tag_id={urllib.parse.quote(tag_id)}"
+        try:
+            # 優先して Microsoft Edge を InPrivate で起動 (Windows 10/11 なら確実に入っているため)
+            # Chrome が良い場合は: subprocess.Popen(['start', 'chrome', '-incognito', url], shell=True)
+            subprocess.Popen(f'start msedge -inprivate "{url}"', shell=True)
+            logger.info("Opened InPrivate browser for registration.")
+        except Exception as e:
+            logger.error("Failed to open browser: %s", e)
+            
         return
 
     direction = state.toggle(tag_id)
     label = "入室" if direction == "in" else "退室"
     logger.info("%s: %s (%s)", label, user.name or "(no name)", tag_id)
+    
+    # 別途ログファイルにも記録
+    entry_logger.info(f"{label},{user.name or 'Unknown'},{tag_id}")
 
     success = send_notification(user, direction)
     if success:

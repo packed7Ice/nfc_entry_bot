@@ -16,6 +16,10 @@ venv/
 # User registry (contains personal info)
 users.json
 
+# Logs
+logs/
+*.log
+
 # IDE
 .vscode/
 .idea/

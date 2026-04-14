@@ -76,11 +76,15 @@ def create_app(registry):
     def callback():
         tag_id = session.get("register_tag_id")
         if not tag_id:
-            return "登録セッションの有効期限が切れています。もう一度タグをタッチしてください", 400
+            msg = "登録セッションの有効期限が切れています。もう一度タグをタッチしてください"
+            events.emit("register_failed", {"message": msg})
+            return render_template("error.html", message=msg), 400
 
         code = request.args.get("code")
         if not code:
-            return "認証がキャンセルされました", 400
+            msg = "認証がキャンセルされました"
+            events.emit("register_failed", {"message": msg})
+            return render_template("error.html", message=msg), 400
 
         redirect_uri = url_for("callback", _external=True)
 
@@ -94,13 +98,17 @@ def create_app(registry):
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         r = requests.post(TOKEN_URL, data=data, headers=headers)
         if not r.ok:
-            return f"アクセストークンの取得に失敗しました: {r.text}", 500
+            msg = f"アクセストークンの取得に失敗しました: {r.text}"
+            events.emit("register_failed", {"message": msg})
+            return render_template("error.html", message=msg), 500
         
         token = r.json().get("access_token")
         
         r_user = requests.get(USER_API, headers={"Authorization": f"Bearer {token}"})
         if not r_user.ok:
-            return "ユーザー情報の取得に失敗しました", 500
+            msg = "ユーザー情報の取得に失敗しました"
+            events.emit("register_failed", {"message": msg})
+            return render_template("error.html", message=msg), 500
             
         user_info = r_user.json()
         discord_user_id = user_info["id"]
