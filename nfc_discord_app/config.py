@@ -21,6 +21,8 @@ NFC_READER_PATH: str = os.getenv("NFC_READER_PATH", "usb:054c:06c1")
 
 WEBHOOK_TIMEOUT_SECONDS: int = int(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10"))
 
+STATE_RESET_HOURS: int = int(os.getenv("STATE_RESET_HOURS", "12"))
+
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
 

@@ -1,5 +1,6 @@
 """NFC reader interface for Sony RC-S380 via nfcpy."""
 
+import threading
 from typing import Optional, Callable
 
 from config import get_logger, NFC_READER_PATH
@@ -33,6 +34,7 @@ class NFCReader:
     def __init__(self, path: str = NFC_READER_PATH) -> None:
         self._path = path
         self._clf: Optional["nfc.ContactlessFrontend"] = None  # type: ignore[name-defined]
+        self._stop_event = threading.Event()
 
     def open(self) -> bool:
         """Open the NFC reader. Returns True on success."""
@@ -41,14 +43,20 @@ class NFCReader:
             return False
         try:
             self._clf = nfc.ContactlessFrontend(self._path)
+            self._stop_event.clear()
             logger.info("NFC reader opened: %s", self._clf)
             return True
         except IOError as exc:
             logger.error("Failed to open NFC reader at %s: %s", self._path, exc)
             return False
 
+    def stop(self) -> None:
+        """Signal the reader to stop waiting for tags."""
+        self._stop_event.set()
+
     def close(self) -> None:
-        """Close the NFC reader."""
+        """Stop and close the NFC reader."""
+        self.stop()
         if self._clf is not None:
             self._clf.close()
             self._clf = None
@@ -59,9 +67,13 @@ class NFCReader:
 
         This method blocks until a tag is tapped and released.
         It calls on_connect(tag_id) once per tap.
+        Returns early if stop() is called.
         """
         if self._clf is None:
             logger.error("NFC reader is not open")
+            return
+
+        if self._stop_event.is_set():
             return
 
         tag_id_holder: list[str] = []
@@ -75,10 +87,17 @@ class NFCReader:
             # Return True to keep the tag active until removed
             return True
 
+        def should_terminate() -> bool:
+            return self._stop_event.is_set()
+
         try:
-            self._clf.connect(rdwr={"on-connect": connected})
+            self._clf.connect(
+                rdwr={"on-connect": connected},
+                terminate=should_terminate,
+            )
         except Exception as exc:
-            logger.error("Error during NFC read: %s", exc)
+            if not self._stop_event.is_set():
+                logger.error("Error during NFC read: %s", exc)
             return
 
         if tag_id_holder:

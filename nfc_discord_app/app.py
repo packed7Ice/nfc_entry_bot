@@ -1,9 +1,9 @@
-"""Entry point — NFC watch loop with cooldown and Discord notification."""
+"""Entry point — NFC watch loop with cooldown, state toggle, and Discord notification."""
 
 import sys
 import time
 
-from config import get_logger, validate_config, COOLDOWN_SECONDS
+from config import get_logger, validate_config, COOLDOWN_SECONDS, STATE_RESET_HOURS
 from registry import UserRegistry, normalize_tag_id
 from notifier import send_notification
 from nfc_reader import NFCReader
@@ -30,7 +30,41 @@ class CooldownTracker:
         self._last_sent[tag_id] = time.time()
 
 
-def handle_tag(tag_id_raw: str, registry: UserRegistry, cooldown: CooldownTracker) -> None:
+class StateTracker:
+    """Tracks IN/OUT state per tag, with automatic timeout reset."""
+
+    def __init__(self, reset_hours: int = STATE_RESET_HOURS) -> None:
+        self._reset_seconds = reset_hours * 3600
+        self._states: dict[str, tuple[str, float]] = {}  # tag_id -> (state, timestamp)
+
+    def toggle(self, tag_id: str) -> str:
+        """Toggle the state for a tag and return the new direction ('in' or 'out')."""
+        current = self._get_state(tag_id)
+        new_state = "out" if current == "in" else "in"
+        self._states[tag_id] = (new_state, time.time())
+        return new_state
+
+    def _get_state(self, tag_id: str) -> str:
+        """Get the current state, resetting to 'out' if expired."""
+        entry = self._states.get(tag_id)
+        if entry is None:
+            return "out"
+        state, timestamp = entry
+        if (time.time() - timestamp) >= self._reset_seconds:
+            return "out"
+        return state
+
+    def get_display_state(self, tag_id: str) -> str:
+        """Get a human-readable label for the current state."""
+        return self._get_state(tag_id).upper()
+
+
+def handle_tag(
+    tag_id_raw: str,
+    registry: UserRegistry,
+    cooldown: CooldownTracker,
+    state: StateTracker,
+) -> None:
     """Process a single NFC tag detection."""
     tag_id = normalize_tag_id(tag_id_raw)
     logger.info("NFC tag detected: %s", tag_id)
@@ -44,8 +78,11 @@ def handle_tag(tag_id_raw: str, registry: UserRegistry, cooldown: CooldownTracke
         logger.warning("Unregistered tag: %s", tag_id)
         return
 
-    logger.info("Registered user: %s", user.name or "(no name)")
-    success = send_notification(user)
+    direction = state.toggle(tag_id)
+    label = "入室" if direction == "in" else "退室"
+    logger.info("%s: %s (%s)", label, user.name or "(no name)", tag_id)
+
+    success = send_notification(user, direction)
     if success:
         cooldown.record(tag_id)
 
@@ -62,6 +99,7 @@ def main() -> None:
 
     registry = UserRegistry()
     cooldown = CooldownTracker()
+    state = StateTracker()
     reader = NFCReader()
 
     if not reader.open():
@@ -69,20 +107,30 @@ def main() -> None:
         sys.exit(1)
 
     logger.info(
-        "Watching for NFC tags (cooldown=%ds). Press Ctrl+C to stop.",
+        "Watching for NFC tags (cooldown=%ds, state reset=%dh). Press Ctrl+C to stop.",
         COOLDOWN_SECONDS,
+        STATE_RESET_HOURS,
     )
 
+    import signal
+
+    def signal_handler(sig: int, frame: object) -> None:
+        logger.info("Ctrl+C pressed. Shutting down…")
+        reader.stop()
+
+    signal.signal(signal.SIGINT, signal_handler)
+
     try:
-        while True:
+        # Loop until reader is told to stop
+        while not (hasattr(reader, "_stop_event") and reader._stop_event.is_set()):
             reader.wait_for_tag(
-                lambda tid: handle_tag(tid, registry, cooldown)
+                lambda tid: handle_tag(tid, registry, cooldown, state)
             )
     except KeyboardInterrupt:
-        logger.info("Shutting down…")
+        # Fallback if signal handler isn't enough
+        pass
     finally:
         reader.close()
-
 
 if __name__ == "__main__":
     main()

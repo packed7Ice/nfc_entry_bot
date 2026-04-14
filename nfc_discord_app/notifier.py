@@ -8,18 +8,23 @@ from registry import UserInfo
 logger = get_logger(__name__)
 
 
-def build_message(user: UserInfo) -> str:
-    """Build the notification message based on available user fields."""
+def build_message(user: UserInfo, direction: str = "in") -> str:
+    """Build the notification message based on available user fields and direction."""
+    if direction == "out":
+        msg = user.message_out
+    else:
+        msg = user.message_in
+
     if user.discord_user_id:
-        return f"<@{user.discord_user_id}> {user.message}"
+        return f"<@{user.discord_user_id}> {msg}"
     if user.name:
-        return f"{user.name} {user.message}"
+        return f"{user.name} {msg}"
     return "登録済みユーザーがNFCをタッチしました"
 
 
-def send_notification(user: UserInfo) -> bool:
+def send_notification(user: UserInfo, direction: str = "in") -> bool:
     """Send a Discord webhook message. Returns True on success."""
-    message = build_message(user)
+    message = build_message(user, direction)
     payload = {"content": message}
 
     try:
