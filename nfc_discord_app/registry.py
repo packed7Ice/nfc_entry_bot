@@ -17,16 +17,10 @@ class UserInfo:
         tag_id: str,
         name: str,
         discord_user_id: str,
-        message: str,
-        message_in: str,
-        message_out: str,
     ) -> None:
         self.tag_id = tag_id
         self.name = name
         self.discord_user_id = discord_user_id
-        self.message = message
-        self.message_in = message_in
-        self.message_out = message_out
 
     def __repr__(self) -> str:
         return f"UserInfo(tag_id={self.tag_id!r}, name={self.name!r})"
@@ -71,14 +65,10 @@ class UserRegistry:
         entry = self._users.get(normalized)
         if entry is None:
             return None
-        default_message = entry.get("message", "打刻しました")
         return UserInfo(
             tag_id=normalized,
             name=entry.get("name", ""),
             discord_user_id=entry.get("discord_user_id", ""),
-            message=default_message,
-            message_in=entry.get("message_in", default_message),
-            message_out=entry.get("message_out", default_message),
         )
 
     def reload(self) -> None:

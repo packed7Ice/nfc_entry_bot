@@ -10,10 +10,7 @@ logger = get_logger(__name__)
 
 def build_message(user: UserInfo, direction: str = "in") -> str:
     """Build the notification message based on available user fields and direction."""
-    if direction == "out":
-        msg = user.message_out
-    else:
-        msg = user.message_in
+    msg = "入室しました" if direction == "in" else "退室しました"
 
     if user.discord_user_id:
         return f"<@{user.discord_user_id}> {msg}"
