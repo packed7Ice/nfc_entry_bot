@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC Discord Entry</title>
+    <!-- Modern Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --surface: #1e293b;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: var(--surface);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            max-width: 480px;
+            width: 90%;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .icon-container {
+            font-size: 64px;
+            margin-bottom: 20px;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        h1 {
+            margin: 0 0 10px 0;
+            font-weight: 800;
+            font-size: 28px;
+            letter-spacing: -0.5px;
+        }
+
+        p {
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-bottom: 30px;
+        }
+
+        .log-area {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: left;
+            font-family: monospace;
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        .log-entry { margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; }
+        .log-entry:last-child { border: none; margin-bottom: 0; padding-bottom: 0; }
+        .log-highlight { color: var(--success); font-weight: bold; }
+        .log-warn { color: var(--danger); font-weight: bold; }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 16px;
+            display: inline-block;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+
+        /* Registration UI (hidden by default) */
+        #register-ui { display: none; }
+        #standby-ui { display: block; }
+        
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="main-container">
+        
+        <!-- Standby UI -->
+        <div id="standby-ui">
+            <div class="icon-container pulse" id="status-icon">💳</div>
+            <h1 id="status-title">NFCタッチ待ち</h1>
+            <p id="status-desc">リーダーにカードやタグをタッチしてください</p>
+            <div class="log-area" id="log-list">
+                <div class="log-entry">システム起動完了... 監視中</div>
+            </div>
+        </div>
+
+        <!-- Registration UI -->
+        <div id="register-ui">
+            <div class="icon-container" style="color: var(--primary)">⚠️</div>
+            <h1>未登録のタグです</h1>
+            <p>このタグ ( ID: <strong id="reg-tag-id" style="color:white;"></strong> ) は未登録です。<br>Discordアカウントと紐付けて登録しますか？</p>
+            <a href="#" id="auth-btn" class="btn">Discordでログインして登録</a>
+            <button class="btn" style="background: transparent; border: 1px solid var(--text-muted); color: var(--text-muted); margin-top: 15px;" onclick="cancelRegistration()">キャンセル</button>
+        </div>
+
+    </div>
+
+    <script>
+        const logs = document.getElementById('log-list');
+        const standbyUi = document.getElementById('standby-ui');
+        const registerUi = document.getElementById('register-ui');
+        const regTagId = document.getElementById('reg-tag-id');
+        const authBtn = document.getElementById('auth-btn');
+
+        function addLog(html) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const time = new Date().toLocaleTimeString('ja-JP');
+            entry.innerHTML = `<span style="color:#64748b">[${time}]</span> ${html}`;
+            logs.appendChild(entry);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function showRegister(tagId) {
+            standbyUi.style.display = 'none';
+            registerUi.style.display = 'block';
+            regTagId.innerText = tagId;
+            authBtn.href = `/register_start?tag_id=${tagId}`;
+        }
+
+        function cancelRegistration() {
+            registerUi.style.display = 'none';
+            standbyUi.style.display = 'block';
+            addLog("登録をキャンセルしました");
+        }
+
+        // SSE Connection
+        const source = new EventSource("/stream");
+        source.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === "unregistered") {
+                addLog(`<span class="log-warn">未登録タグ: ${data.data.tag_id}</span>`);
+                showRegister(data.data.tag_id);
+            } 
+            else if (data.type === "touch") {
+                const labelColor = data.data.direction === "in" ? "#10b981" : "#f59e0b";
+                const label = data.data.direction === "in" ? "入室" : "退室";
+                addLog(`<span style="color:${labelColor};font-weight:bold;">[${label}]</span> ${data.data.name}`);
+                
+                // If they were on the register screen, switch back to standby
+                if (registerUi.style.display === 'block') {
+                    cancelRegistration();
+                }
+            }
+            else if (data.type === "registered") {
+                addLog(`<span class="log-highlight">登録完了: ${data.data.name}</span>`);
+                setTimeout(() => {
+                    cancelRegistration();
+                }, 3000); // 3 seconds after register success
+            }
+        };
+    </script>
+</body>
+</html>

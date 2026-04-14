@@ -25,6 +25,10 @@ STATE_RESET_HOURS: int = int(os.getenv("STATE_RESET_HOURS", "12"))
 
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
+DISCORD_CLIENT_ID: str = os.getenv("DISCORD_CLIENT_ID", "")
+DISCORD_CLIENT_SECRET: str = os.getenv("DISCORD_CLIENT_SECRET", "")
+FLASK_SECRET_KEY: str = os.getenv("FLASK_SECRET_KEY", "default-dev-secret-key")
+
 
 def get_logger(name: str) -> logging.Logger:
     """Create a configured logger instance."""

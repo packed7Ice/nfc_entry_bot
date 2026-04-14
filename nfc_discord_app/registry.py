@@ -59,6 +59,16 @@ class UserRegistry:
         except OSError as exc:
             logger.error("Failed to read users.json: %s", exc)
 
+    def _save(self) -> bool:
+        """Save the current users dict to disk."""
+        try:
+            with open(self._path, "w", encoding="utf-8") as f:
+                json.dump(self._users, f, ensure_ascii=False, indent=2)
+            return True
+        except OSError as exc:
+            logger.error("Failed to save users.json: %s", exc)
+            return False
+
     def lookup(self, tag_id: str) -> Optional[UserInfo]:
         """Look up a user by normalized tag ID. Returns None if not found."""
         normalized = normalize_tag_id(tag_id)
@@ -75,3 +85,12 @@ class UserRegistry:
         """Reload the JSON file from disk."""
         self._users.clear()
         self._load()
+
+    def add_user(self, tag_id: str, name: str, discord_user_id: str) -> bool:
+        """Add or update a user and save to disk."""
+        normalized = normalize_tag_id(tag_id)
+        self._users[normalized] = {
+            "name": name,
+            "discord_user_id": discord_user_id
+        }
+        return self._save()

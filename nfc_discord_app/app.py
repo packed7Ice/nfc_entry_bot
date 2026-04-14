@@ -59,6 +59,9 @@ class StateTracker:
         return self._get_state(tag_id).upper()
 
 
+import threading
+from web_app import create_app, events
+
 def handle_tag(
     tag_id_raw: str,
     registry: UserRegistry,
@@ -76,6 +79,7 @@ def handle_tag(
     user = registry.lookup(tag_id)
     if user is None:
         logger.warning("Unregistered tag: %s", tag_id)
+        events.emit("unregistered", {"tag_id": tag_id})
         return
 
     direction = state.toggle(tag_id)
@@ -85,10 +89,25 @@ def handle_tag(
     success = send_notification(user, direction)
     if success:
         cooldown.record(tag_id)
+    
+    events.emit("touch", {"tag_id": tag_id, "name": user.name, "direction": direction})
+
+
+def nfc_worker(reader: NFCReader, registry: UserRegistry, cooldown: CooldownTracker, state: StateTracker) -> None:
+    """Background thread to watch for NFC tags."""
+    logger.info(
+        "Watching for NFC tags (cooldown=%ds, state reset=%dh).",
+        COOLDOWN_SECONDS,
+        STATE_RESET_HOURS,
+    )
+    while not (hasattr(reader, "_stop_event") and reader._stop_event.is_set()):
+        reader.wait_for_tag(
+            lambda tid: handle_tag(tid, registry, cooldown, state)
+        )
 
 
 def main() -> None:
-    logger.info("=== NFC Discord Notifier starting ===")
+    logger.info("=== NFC Discord Notifier (Web UI) starting ===")
 
     errors = validate_config()
     if errors:
@@ -106,31 +125,28 @@ def main() -> None:
         logger.error("Could not open NFC reader. Is the device connected?")
         sys.exit(1)
 
-    logger.info(
-        "Watching for NFC tags (cooldown=%ds, state reset=%dh). Press Ctrl+C to stop.",
-        COOLDOWN_SECONDS,
-        STATE_RESET_HOURS,
-    )
+    app = create_app(registry)
 
+    # Start NFC background thread
+    t = threading.Thread(target=nfc_worker, args=(reader, registry, cooldown, state), daemon=True)
+    t.start()
+
+    logger.info("Starting Flask server on http://localhost:5000")
+    
     import signal
-
     def signal_handler(sig: int, frame: object) -> None:
         logger.info("Ctrl+C pressed. Shutting down…")
         reader.stop()
+        sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
 
     try:
-        # Loop until reader is told to stop
-        while not (hasattr(reader, "_stop_event") and reader._stop_event.is_set()):
-            reader.wait_for_tag(
-                lambda tid: handle_tag(tid, registry, cooldown, state)
-            )
-    except KeyboardInterrupt:
-        # Fallback if signal handler isn't enough
-        pass
+        # Run Flask server (blocks main thread)
+        app.run(host="127.0.0.1", port=5000, threaded=True)
     finally:
         reader.close()
+
 
 if __name__ == "__main__":
     main()
