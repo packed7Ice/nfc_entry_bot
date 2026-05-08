@@ -18,7 +18,10 @@ USERS_JSON_PATH: Path = BASE_DIR / "users.json"
 
 COOLDOWN_SECONDS: int = int(os.getenv("COOLDOWN_SECONDS", "5"))
 
-NFC_READER_PATH: str = os.getenv("NFC_READER_PATH", "usb:054c:06c1")
+# カンマ区切りで複数パスを指定可能。先頭から順に接続を試みる。
+# RC-S380: usb:054c:06c1 / RC-S956: usb:054c:0dc8 (要確認: デバイスマネージャーのハードウェアIDで確認)
+_NFC_READER_PATH_RAW: str = os.getenv("NFC_READER_PATH", "usb:054c:06c1,usb:054c:0dc8")
+NFC_READER_PATHS: list[str] = [p.strip() for p in _NFC_READER_PATH_RAW.split(",") if p.strip()]
 
 WEBHOOK_TIMEOUT_SECONDS: int = int(os.getenv("WEBHOOK_TIMEOUT_SECONDS", "10"))
 

@@ -1,9 +1,9 @@
-"""NFC reader interface for Sony RC-S380 via nfcpy."""
+"""NFC reader interface for Sony RC-S380 / RC-S956 via nfcpy."""
 
 import threading
 from typing import Optional, Callable
 
-from config import get_logger, NFC_READER_PATH
+from config import get_logger, NFC_READER_PATHS
 
 logger = get_logger(__name__)
 
@@ -29,26 +29,36 @@ def _extract_tag_id(tag: "nfc.tag.Tag") -> str:  # type: ignore[name-defined]
 
 
 class NFCReader:
-    """Wraps nfcpy to provide a simple tag-reading interface."""
+    """Wraps nfcpy to provide a simple tag-reading interface.
 
-    def __init__(self, path: str = NFC_READER_PATH) -> None:
-        self._path = path
+    Tries each path in NFC_READER_PATHS in order and uses the first one that opens.
+    """
+
+    def __init__(self, paths: Optional[list[str]] = None) -> None:
+        self._paths = paths if paths is not None else NFC_READER_PATHS
         self._clf: Optional["nfc.ContactlessFrontend"] = None  # type: ignore[name-defined]
+        self._active_path: Optional[str] = None
         self._stop_event = threading.Event()
 
     def open(self) -> bool:
-        """Open the NFC reader. Returns True on success."""
+        """Try each configured path in order. Returns True on first success."""
         if not NFC_AVAILABLE:
             logger.error("nfcpy is not installed — cannot open reader")
             return False
-        try:
-            self._clf = nfc.ContactlessFrontend(self._path)
-            self._stop_event.clear()
-            logger.info("NFC reader opened: %s", self._clf)
-            return True
-        except IOError as exc:
-            logger.error("Failed to open NFC reader at %s: %s", self._path, exc)
-            return False
+
+        for path in self._paths:
+            try:
+                clf = nfc.ContactlessFrontend(path)  # type: ignore[name-defined]
+                self._clf = clf
+                self._active_path = path
+                self._stop_event.clear()
+                logger.info("NFC reader opened at %s: %s", path, clf)
+                return True
+            except IOError:
+                logger.debug("NFC reader not found at %s — trying next", path)
+
+        logger.error("No NFC reader found. Tried paths: %s", self._paths)
+        return False
 
     def is_stopped(self) -> bool:
         """Return True if stop() has been called."""
@@ -64,13 +74,13 @@ class NFCReader:
         if self._clf is not None:
             self._clf.close()
             self._clf = None
-            logger.info("NFC reader closed")
+            logger.info("NFC reader closed (was: %s)", self._active_path)
+            self._active_path = None
 
     def wait_for_tag(self, on_connect: Callable[[str], None]) -> None:
         """Block until a tag is detected, then call on_connect with the tag ID.
 
-        This method blocks until a tag is tapped and released.
-        It calls on_connect(tag_id) once per tap.
+        Blocks until a tag is tapped and released, then calls on_connect(tag_id).
         Returns early if stop() is called.
         """
         if self._clf is None:
@@ -88,7 +98,6 @@ class NFCReader:
                 tag_id_holder.append(tid)
             else:
                 logger.warning("Tag detected but could not extract identifier")
-            # Return True to keep the tag active until removed
             return True
 
         def should_terminate() -> bool:
@@ -109,7 +118,7 @@ class NFCReader:
 
     def __enter__(self) -> "NFCReader":
         if not self.open():
-            raise IOError(f"Failed to open NFC reader at {self._path}")
+            raise IOError(f"Failed to open NFC reader. Tried paths: {self._paths}")
         return self
 
     def __exit__(self, *args: object) -> None:
