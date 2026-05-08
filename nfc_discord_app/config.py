@@ -30,6 +30,9 @@ DISCORD_CLIENT_ID: str = os.getenv("DISCORD_CLIENT_ID", "")
 DISCORD_CLIENT_SECRET: str = os.getenv("DISCORD_CLIENT_SECRET", "")
 FLASK_SECRET_KEY: str = os.getenv("FLASK_SECRET_KEY", "default-dev-secret-key")
 
+SERVER_HOST: str = os.getenv("SERVER_HOST", "127.0.0.1")
+SERVER_PORT: int = int(os.getenv("SERVER_PORT", "5000"))
+
 
 def get_logger(name: str) -> logging.Logger:
     """Create a configured logger instance."""
@@ -67,6 +70,9 @@ def get_entry_logger() -> logging.Logger:
     return logger
 
 
+_DEFAULT_SECRET_KEY = "default-dev-secret-key"
+
+
 def validate_config() -> list[str]:
     """Validate required configuration values and return a list of errors."""
     errors: list[str] = []
@@ -74,4 +80,9 @@ def validate_config() -> list[str]:
         errors.append("DISCORD_WEBHOOK_URL is not set. Check your .env file.")
     if not USERS_JSON_PATH.exists():
         errors.append(f"users.json not found at {USERS_JSON_PATH}")
+    if FLASK_SECRET_KEY == _DEFAULT_SECRET_KEY:
+        errors.append(
+            "FLASK_SECRET_KEY は既定値のままです。.env に強力な秘密鍵を設定してください。"
+            " (例: python -c \"import secrets; print(secrets.token_hex(32))\")"
+        )
     return errors

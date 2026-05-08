@@ -8,7 +8,7 @@ from config import get_logger, NFC_READER_PATH
 logger = get_logger(__name__)
 
 try:
-    import nfc
+    import nfc  # type: ignore[import-untyped]
     NFC_AVAILABLE = True
 except ImportError:
     NFC_AVAILABLE = False
@@ -49,6 +49,10 @@ class NFCReader:
         except IOError as exc:
             logger.error("Failed to open NFC reader at %s: %s", self._path, exc)
             return False
+
+    def is_stopped(self) -> bool:
+        """Return True if stop() has been called."""
+        return self._stop_event.is_set()
 
     def stop(self) -> None:
         """Signal the reader to stop waiting for tags."""
@@ -104,7 +108,8 @@ class NFCReader:
             on_connect(tag_id_holder[0])
 
     def __enter__(self) -> "NFCReader":
-        self.open()
+        if not self.open():
+            raise IOError(f"Failed to open NFC reader at {self._path}")
         return self
 
     def __exit__(self, *args: object) -> None:

@@ -162,13 +162,14 @@
             standbyUi.style.display = 'none';
             registerUi.style.display = 'block';
             regTagId.innerText = tagId;
-            authBtn.href = `/register_start?tag_id=${tagId}`;
+            authBtn.href = `/register_start?tag_id=${encodeURIComponent(tagId)}`;
         }
 
         function cancelRegistration() {
             registerUi.style.display = 'none';
             standbyUi.style.display = 'block';
             addLog("登録をキャンセルしました");
+            fetch('/register_cancel', { method: 'POST' }).catch(() => {});
         }
 
         // SSE Connection

@@ -1,6 +1,8 @@
 """User registry backed by a JSON file."""
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -60,13 +62,19 @@ class UserRegistry:
             logger.error("Failed to read users.json: %s", exc)
 
     def _save(self) -> bool:
-        """Save the current users dict to disk."""
+        """Save the current users dict to disk atomically via a temp file."""
+        tmp_path = None
         try:
-            with open(self._path, "w", encoding="utf-8") as f:
+            fd, tmp = tempfile.mkstemp(dir=self._path.parent, suffix=".tmp")
+            tmp_path = Path(tmp)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(self._users, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, self._path)
             return True
         except OSError as exc:
             logger.error("Failed to save users.json: %s", exc)
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
             return False
 
     def lookup(self, tag_id: str) -> Optional[UserInfo]:

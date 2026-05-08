@@ -1,12 +1,27 @@
 """Entry point — NFC watch loop with cooldown, state toggle, and Discord notification."""
 
+import csv
+import io
+import signal
+import subprocess
 import sys
+import threading
 import time
+import urllib.parse
 
-from config import get_logger, get_entry_logger, validate_config, COOLDOWN_SECONDS, STATE_RESET_HOURS
+from config import (
+    get_logger,
+    get_entry_logger,
+    validate_config,
+    COOLDOWN_SECONDS,
+    STATE_RESET_HOURS,
+    SERVER_HOST,
+    SERVER_PORT,
+)
 from registry import UserRegistry, normalize_tag_id
 from notifier import send_notification
 from nfc_reader import NFCReader
+from web_app import create_app, events
 
 logger = get_logger(__name__)
 entry_logger = get_entry_logger()
@@ -60,12 +75,6 @@ class StateTracker:
         return self._get_state(tag_id).upper()
 
 
-import threading
-from web_app import create_app, events
-
-import subprocess
-import urllib.parse
-
 def handle_tag(
     tag_id_raw: str,
     registry: UserRegistry,
@@ -84,30 +93,32 @@ def handle_tag(
     if user is None:
         logger.warning("Unregistered tag: %s", tag_id)
         events.emit("unregistered", {"tag_id": tag_id})
-        
-        # Pop up Incognito browser for registration
-        url = f"http://localhost:5000/register_start?tag_id={urllib.parse.quote(tag_id)}"
+
+        url = (
+            f"http://{SERVER_HOST}:{SERVER_PORT}"
+            f"/register_start?tag_id={urllib.parse.quote(tag_id)}"
+        )
         try:
-            # 優先して Microsoft Edge を InPrivate で起動 (Windows 10/11 なら確実に入っているため)
-            # Chrome が良い場合は: subprocess.Popen(['start', 'chrome', '-incognito', url], shell=True)
-            subprocess.Popen(f'start msedge -inprivate "{url}"', shell=True)
+            # shell=False でリスト渡しにすることで注入リスクを排除
+            subprocess.Popen(["cmd", "/c", "start", "", "msedge", "-inprivate", url])
             logger.info("Opened InPrivate browser for registration.")
-        except Exception as e:
+        except (subprocess.SubprocessError, OSError) as e:
             logger.error("Failed to open browser: %s", e)
-            
+
         return
 
     direction = state.toggle(tag_id)
     label = "入室" if direction == "in" else "退室"
     logger.info("%s: %s (%s)", label, user.name or "(no name)", tag_id)
-    
-    # 別途ログファイルにも記録
-    entry_logger.info(f"{label},{user.name or 'Unknown'},{tag_id}")
+
+    buf = io.StringIO()
+    csv.writer(buf).writerow([label, user.name or "Unknown", tag_id])
+    entry_logger.info(buf.getvalue().rstrip())
 
     success = send_notification(user, direction)
     if success:
         cooldown.record(tag_id)
-    
+
     events.emit("touch", {"tag_id": tag_id, "name": user.name, "direction": direction})
 
 
@@ -118,10 +129,13 @@ def nfc_worker(reader: NFCReader, registry: UserRegistry, cooldown: CooldownTrac
         COOLDOWN_SECONDS,
         STATE_RESET_HOURS,
     )
-    while not (hasattr(reader, "_stop_event") and reader._stop_event.is_set()):
+    while not reader.is_stopped():
         reader.wait_for_tag(
             lambda tid: handle_tag(tid, registry, cooldown, state)
         )
+        # nfcpy エラーで即時 return した場合のビジーループを防ぐ
+        if not reader.is_stopped():
+            time.sleep(1)
 
 
 def main() -> None:
@@ -145,14 +159,12 @@ def main() -> None:
 
     app = create_app(registry)
 
-    # Start NFC background thread
     t = threading.Thread(target=nfc_worker, args=(reader, registry, cooldown, state), daemon=True)
     t.start()
 
-    logger.info("Starting Flask server on http://localhost:5000")
-    
-    import signal
-    def signal_handler(sig: int, frame: object) -> None:
+    logger.info("Starting Flask server on http://%s:%d", SERVER_HOST, SERVER_PORT)
+
+    def signal_handler(_sig: int, _frame: object) -> None:
         logger.info("Ctrl+C pressed. Shutting down…")
         reader.stop()
         sys.exit(0)
@@ -160,8 +172,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, signal_handler)
 
     try:
-        # Run Flask server (blocks main thread)
-        app.run(host="127.0.0.1", port=5000, threaded=True)
+        app.run(host=SERVER_HOST, port=SERVER_PORT, threaded=True)
     finally:
         reader.close()
 
